@@ -7,10 +7,21 @@ import ru.gb.storage.commons.message.*;
 import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
+import java.sql.Connection;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
 
-public class FirstServerHandler extends SimpleChannelInboundHandler<Message> {
+public class ServerHandler extends SimpleChannelInboundHandler<Message> {
     private int counter = 0;
     private RandomAccessFile raf = null;
+    private Connection dbConnector;
+    private Statement statement;
+
+    public ServerHandler(Connection dbConnector, Statement statement) {
+        this.dbConnector = dbConnector;
+        this.statement = statement;
+    }
 
     @Override
     public void channelActive(ChannelHandlerContext ctx) {
@@ -21,7 +32,7 @@ public class FirstServerHandler extends SimpleChannelInboundHandler<Message> {
     }
 
     @Override
-    protected void channelRead0(ChannelHandlerContext ctx, Message msg) throws IOException {
+    protected void channelRead0(ChannelHandlerContext ctx, Message msg) throws IOException, SQLException {
         if (msg instanceof TextMessage) {
             TextMessage message = (TextMessage) msg;
             System.out.println("incoming text message: " + message.getText());
@@ -34,8 +45,19 @@ public class FirstServerHandler extends SimpleChannelInboundHandler<Message> {
         }
         if (msg instanceof AuthMessage) {
             AuthMessage message = (AuthMessage) msg;
+            if (message.getStatus().contains("registration")) {
+                ResultSet credentialsSet = statement.executeQuery("SELECT * FROM users WHERE Login = '" + message.getLogin() + "'");
+                if (credentialsSet.next()) {
+                    message.setStatus("User with this login already exist");
+                    message.setLogin(null);
+                    message.setPassword(null);
+                } else {
+                    statement.executeUpdate("INSERT INTO users (Login, Password)\n"
+                            + "VALUES ('" + message.getLogin() + "', '" + message.getPassword() + "');");
+                }
+            }
             System.out.println("incoming auth message: " + message.getLogin() + " " + message.getPassword());
-            ctx.writeAndFlush(msg);
+            ctx.writeAndFlush(message);
         }
         if (msg instanceof FileRequestMessage) {
             System.out.println("File request received");
@@ -75,38 +97,36 @@ public class FirstServerHandler extends SimpleChannelInboundHandler<Message> {
 //            });
             ctx.channel().
 
-                writeAndFlush(message).
+                    writeAndFlush(message).
 
-                addListener((a) ->
+                    addListener((a) ->
 
-                {
-                    if (!eof) {
-                        sendFile(ctx);
-                        counter++;
-                    }
-                });
-            if(eof)
-
-                {
-                    System.out.println("File sent in " + counter + " packets");
-                    counter = 0;
-                    raf.close();
-                    raf = null;
-                }
-            }
-        }
-
-        @Override
-        public void exceptionCaught (ChannelHandlerContext ctx, Throwable cause){
-            cause.printStackTrace();
-            ctx.close();
-        }
-
-        @Override
-        public void channelInactive (ChannelHandlerContext ctx) throws IOException {
-            System.out.println("client disconnect");
-            if (raf != null) {
+                    {
+                        if (!eof) {
+                            sendFile(ctx);
+                            counter++;
+                        }
+                    });
+            if (eof) {
+                System.out.println("File sent in " + counter + " packets");
+                counter = 0;
                 raf.close();
+                raf = null;
             }
         }
     }
+
+    @Override
+    public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
+        cause.printStackTrace();
+        ctx.close();
+    }
+
+    @Override
+    public void channelInactive(ChannelHandlerContext ctx) throws IOException {
+        System.out.println("client disconnect");
+        if (raf != null) {
+            raf.close();
+        }
+    }
+}
