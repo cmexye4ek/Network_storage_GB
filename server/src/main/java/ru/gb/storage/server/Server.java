@@ -11,10 +11,10 @@ import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
 import io.netty.handler.codec.LengthFieldPrepender;
 import ru.gb.storage.commons.handler.JsonDecoder;
 import ru.gb.storage.commons.handler.JsonEncoder;
-
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Statement;
+
 
 public class Server {
     private final int port;

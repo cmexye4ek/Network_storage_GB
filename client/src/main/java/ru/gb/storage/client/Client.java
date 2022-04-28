@@ -11,18 +11,9 @@ import ru.gb.storage.commons.handler.JsonDecoder;
 import ru.gb.storage.commons.handler.JsonEncoder;
 import ru.gb.storage.commons.message.AuthMessage;
 import ru.gb.storage.commons.message.FileContentMessage;
-import ru.gb.storage.commons.message.FileRequestMessage;
 import ru.gb.storage.commons.message.Message;
-
-import javax.crypto.SecretKeyFactory;
-import javax.crypto.spec.PBEKeySpec;
 import java.io.IOException;
 import java.io.RandomAccessFile;
-import java.nio.charset.StandardCharsets;
-import java.security.NoSuchAlgorithmException;
-import java.security.SecureRandom;
-import java.security.spec.InvalidKeySpecException;
-import java.security.spec.KeySpec;
 import java.util.Scanner;
 
 

@@ -3,7 +3,6 @@ package ru.gb.storage.server;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import ru.gb.storage.commons.message.*;
-
 import javax.crypto.SecretKeyFactory;
 import javax.crypto.spec.PBEKeySpec;
 import java.io.File;
@@ -17,11 +16,13 @@ import java.security.spec.KeySpec;
 import java.sql.*;
 import java.util.Arrays;
 
+
 public class ServerHandler extends SimpleChannelInboundHandler<Message> {
     private int counter = 0;
     private RandomAccessFile raf = null;
     private Connection dbConnector;
     private Statement statement;
+    private PreparedStatement pStatement;
     private SecureRandom random = new SecureRandom();
     private byte [] salt = new byte[16];
 
@@ -60,15 +61,19 @@ public class ServerHandler extends SimpleChannelInboundHandler<Message> {
                     message.setStatus("User with this login already exist");
                 } else {
                     random.nextBytes(salt);
-                    String ts = new String (salt, StandardCharsets.UTF_8);
-                    statement.executeUpdate("INSERT INTO users (Login, Password, Salt)\n"
-                            + "VALUES ('" + message.getLogin() + "', '" + passHash(message.getPassword(), ts) + "', '" + ts + "');");
+                    pStatement = dbConnector.prepareStatement("INSERT INTO users (Login, Password, Salt) VALUES (?,?,?)");
+                    pStatement.setString(1, message.getLogin());
+                    pStatement.setBytes(2, passHash(message.getPassword(), salt));
+                    pStatement.setBytes(3, salt);
+                    pStatement.addBatch();
+                    pStatement.executeBatch();
+                    pStatement.close();
                 }
             }
             if (message.getStatus().contains("authentication")) {
                 ResultSet credentialsSet = statement.executeQuery("SELECT * FROM users WHERE Login = '" + message.getLogin() + "'");
                 if (credentialsSet.next()) {
-                    if (credentialsSet.getString("Password").equals(passHash(message.getPassword(), credentialsSet.getString("Salt")))) {
+                    if (credentialsSet.getString("Password").equals(new String(passHash(message.getPassword(), credentialsSet.getBytes("Salt"))))) {
                         message.setStatus("auth successful");
                     } else {
                         message.setStatus("wrong password");
@@ -123,12 +128,10 @@ public class ServerHandler extends SimpleChannelInboundHandler<Message> {
         }
     }
 
-    private String passHash (String password, String s) throws InvalidKeySpecException, NoSuchAlgorithmException {
-        byte [] salt = s.getBytes(StandardCharsets.UTF_8);
+    private byte [] passHash (String password, byte [] salt) throws InvalidKeySpecException, NoSuchAlgorithmException {
         KeySpec spec = new PBEKeySpec(password.toCharArray(), salt, 65536, 128);
         SecretKeyFactory factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA1");
-        byte[] hash = factory.generateSecret(spec).getEncoded();
-        return new String(hash, StandardCharsets.UTF_8);
+        return factory.generateSecret(spec).getEncoded();
     }
 
     @Override
