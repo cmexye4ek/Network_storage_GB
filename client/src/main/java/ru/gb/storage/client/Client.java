@@ -30,6 +30,7 @@ public class Client {
 
     //    private static final GlobalChannelTrafficShapingHandler GLOBAL_CHANNEL_TRAFFIC_SHAPING_HANDLER = new GlobalChannelTrafficShapingHandler(Executors.newSingleThreadScheduledExecutor(), 1000);
     private Scanner scanner = new Scanner(System.in);
+    private String command;
     private String login;
     private String password;
 
@@ -55,7 +56,7 @@ public class Client {
                                     new JsonEncoder(),
                                     new SimpleChannelInboundHandler<Message>() {
                                         @Override
-                                        public void channelActive(ChannelHandlerContext ctx) throws Exception {
+                                        public void channelActive(ChannelHandlerContext ctx) {
                                             System.out.println("Connection to server established, please login");
                                             ctx.writeAndFlush(auth());
 //                                            final FileRequestMessage message = new FileRequestMessage();
@@ -102,22 +103,23 @@ public class Client {
 
 
 
-    private AuthMessage auth() throws NoSuchAlgorithmException, InvalidKeySpecException {
+    private AuthMessage auth() {
         final AuthMessage msg = new AuthMessage();
+        System.out.println("would you like to register or login?");
+        command = scanner.nextLine();
+        if (command.contains("register")) {
+            msg.setStatus("register");
+        } else if (command.contains("auth")) {
+            msg.setStatus("authentication");
+        } else {
+            System.out.println("some shit");
+        }
         System.out.println("Login: ");
         login = scanner.nextLine();
         System.out.println("Password: ");
         password = scanner.nextLine();
-        msg.setStatus("registration");
         msg.setLogin(login);
-        SecureRandom random = new SecureRandom();
-        byte [] salt = new byte [16];
-        random.nextBytes(salt);
-        KeySpec spec = new PBEKeySpec(password.toCharArray(), salt, 65536, 128);
-        SecretKeyFactory factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA1");
-        byte[] hash = factory.generateSecret(spec).getEncoded();
-        msg.setPassword(new String(hash, StandardCharsets.UTF_8));
-//        msg.setPassword(password);
+        msg.setPassword(password);
         return msg;
     }
 

@@ -4,19 +4,28 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import ru.gb.storage.commons.message.*;
 
+import javax.crypto.SecretKeyFactory;
+import javax.crypto.spec.PBEKeySpec;
 import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
-import java.sql.Connection;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Statement;
+import java.nio.charset.StandardCharsets;
+import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
+import java.security.spec.InvalidKeySpecException;
+import java.security.spec.KeySpec;
+import java.sql.*;
+import java.util.Arrays;
 
 public class ServerHandler extends SimpleChannelInboundHandler<Message> {
     private int counter = 0;
     private RandomAccessFile raf = null;
     private Connection dbConnector;
     private Statement statement;
+    private SecureRandom random = new SecureRandom();
+    private byte [] salt = new byte[16];
+
+
 
     public ServerHandler(Connection dbConnector, Statement statement) {
         this.dbConnector = dbConnector;
@@ -32,7 +41,7 @@ public class ServerHandler extends SimpleChannelInboundHandler<Message> {
     }
 
     @Override
-    protected void channelRead0(ChannelHandlerContext ctx, Message msg) throws IOException, SQLException {
+    protected void channelRead0(ChannelHandlerContext ctx, Message msg) throws IOException, SQLException, InvalidKeySpecException, NoSuchAlgorithmException {
         if (msg instanceof TextMessage) {
             TextMessage message = (TextMessage) msg;
             System.out.println("incoming text message: " + message.getText());
@@ -45,15 +54,27 @@ public class ServerHandler extends SimpleChannelInboundHandler<Message> {
         }
         if (msg instanceof AuthMessage) {
             AuthMessage message = (AuthMessage) msg;
-            if (message.getStatus().contains("registration")) {
+            if (message.getStatus().contains("register")) {
                 ResultSet credentialsSet = statement.executeQuery("SELECT * FROM users WHERE Login = '" + message.getLogin() + "'");
                 if (credentialsSet.next()) {
                     message.setStatus("User with this login already exist");
-                    message.setLogin(null);
-                    message.setPassword(null);
                 } else {
-                    statement.executeUpdate("INSERT INTO users (Login, Password)\n"
-                            + "VALUES ('" + message.getLogin() + "', '" + message.getPassword() + "');");
+                    random.nextBytes(salt);
+                    String ts = new String (salt, StandardCharsets.UTF_8);
+                    statement.executeUpdate("INSERT INTO users (Login, Password, Salt)\n"
+                            + "VALUES ('" + message.getLogin() + "', '" + passHash(message.getPassword(), ts) + "', '" + ts + "');");
+                }
+            }
+            if (message.getStatus().contains("authentication")) {
+                ResultSet credentialsSet = statement.executeQuery("SELECT * FROM users WHERE Login = '" + message.getLogin() + "'");
+                if (credentialsSet.next()) {
+                    if (credentialsSet.getString("Password").equals(passHash(message.getPassword(), credentialsSet.getString("Salt")))) {
+                        message.setStatus("auth successful");
+                    } else {
+                        message.setStatus("wrong password");
+                    }
+                } else {
+                    message.setStatus("User with this login not exist");
                 }
             }
             System.out.println("incoming auth message: " + message.getLogin() + " " + message.getPassword());
@@ -86,21 +107,7 @@ public class ServerHandler extends SimpleChannelInboundHandler<Message> {
             message.setContent(fileContent);
             final boolean eof = raf.getFilePointer() == raf.length();
             message.setLast(eof);
-//            ctx.channel().writeAndFlush(message).addListener(new ChannelFutureListener() {
-//                @Override
-//                public void operationComplete(ChannelFuture future) throws Exception {
-//                    if (!eof) {
-//                        sendFile(ctx);
-//                        counter++;
-//                    }
-//                }
-//            });
-            ctx.channel().
-
-                    writeAndFlush(message).
-
-                    addListener((a) ->
-
+            ctx.channel().writeAndFlush(message).addListener((a) ->
                     {
                         if (!eof) {
                             sendFile(ctx);
@@ -114,6 +121,14 @@ public class ServerHandler extends SimpleChannelInboundHandler<Message> {
                 raf = null;
             }
         }
+    }
+
+    private String passHash (String password, String s) throws InvalidKeySpecException, NoSuchAlgorithmException {
+        byte [] salt = s.getBytes(StandardCharsets.UTF_8);
+        KeySpec spec = new PBEKeySpec(password.toCharArray(), salt, 65536, 128);
+        SecretKeyFactory factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA1");
+        byte[] hash = factory.generateSecret(spec).getEncoded();
+        return new String(hash, StandardCharsets.UTF_8);
     }
 
     @Override
