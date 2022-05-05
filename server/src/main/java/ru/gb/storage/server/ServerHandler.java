@@ -8,7 +8,6 @@ import javax.crypto.spec.PBEKeySpec;
 import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
-import java.nio.charset.StandardCharsets;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.security.spec.InvalidKeySpecException;
@@ -16,16 +15,15 @@ import java.security.spec.KeySpec;
 import java.sql.*;
 import java.util.Arrays;
 
-
 public class ServerHandler extends SimpleChannelInboundHandler<Message> {
     private int counter = 0;
+    private File userPath = null;
     private RandomAccessFile raf = null;
     private Connection dbConnector;
     private Statement statement;
     private PreparedStatement pStatement;
     private SecureRandom random = new SecureRandom();
     private byte [] salt = new byte[16];
-
 
 
     public ServerHandler(Connection dbConnector, Statement statement) {
@@ -55,35 +53,34 @@ public class ServerHandler extends SimpleChannelInboundHandler<Message> {
         }
         if (msg instanceof AuthMessage) {
             AuthMessage message = (AuthMessage) msg;
+            TextMessage answer = new TextMessage();
             if (message.getStatus().contains("register")) {
-                ResultSet credentialsSet = statement.executeQuery("SELECT * FROM users WHERE Login = '" + message.getLogin() + "'");
+                ResultSet credentialsSet = statement.executeQuery("SELECT Login FROM users WHERE Login = '" + message.getLogin() + "'");
+
                 if (credentialsSet.next()) {
-                    message.setStatus("User with this login already exist");
+                    answer.setText("/auth_error_login_exist");
                 } else {
-                    random.nextBytes(salt);
-                    pStatement = dbConnector.prepareStatement("INSERT INTO users (Login, Password, Salt) VALUES (?,?,?)");
-                    pStatement.setString(1, message.getLogin());
-                    pStatement.setBytes(2, passHash(message.getPassword(), salt));
-                    pStatement.setBytes(3, salt);
-                    pStatement.addBatch();
-                    pStatement.executeBatch();
-                    pStatement.close();
+                    register(message);
+                    answer.setText("/success_reg");
+                    message.setStatus("auth_after_reg");
+                    ctx.writeAndFlush(message);
                 }
             }
             if (message.getStatus().contains("authentication")) {
                 ResultSet credentialsSet = statement.executeQuery("SELECT * FROM users WHERE Login = '" + message.getLogin() + "'");
                 if (credentialsSet.next()) {
-                    if (credentialsSet.getString("Password").equals(new String(passHash(message.getPassword(), credentialsSet.getBytes("Salt"))))) {
-                        message.setStatus("auth successful");
+                    if (Arrays.equals(credentialsSet.getBytes("Password"), passHash(message.getPassword(), credentialsSet.getBytes("Salt")))) {
+                        answer.setText("/success_auth");
+                        userPath = new File("./user" + credentialsSet.getString("id"));
+                        sendListFiles(ctx);
                     } else {
-                        message.setStatus("wrong password");
+                        answer.setText("/auth_error_wrong_pass");
                     }
                 } else {
-                    message.setStatus("User with this login not exist");
+                    answer.setText("/auth_error_login_not_exist");
                 }
             }
-            System.out.println("incoming auth message: " + message.getLogin() + " " + message.getPassword());
-            ctx.writeAndFlush(message);
+            ctx.writeAndFlush(answer);
         }
         if (msg instanceof FileRequestMessage) {
             System.out.println("File request received");
@@ -128,10 +125,35 @@ public class ServerHandler extends SimpleChannelInboundHandler<Message> {
         }
     }
 
+
+
     private byte [] passHash (String password, byte [] salt) throws InvalidKeySpecException, NoSuchAlgorithmException {
         KeySpec spec = new PBEKeySpec(password.toCharArray(), salt, 65536, 128);
         SecretKeyFactory factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA1");
         return factory.generateSecret(spec).getEncoded();
+    }
+
+    private void register (AuthMessage message) throws SQLException, InvalidKeySpecException, NoSuchAlgorithmException {
+        random.nextBytes(salt);
+        pStatement = dbConnector.prepareStatement("INSERT INTO users (Login, Password, Salt) VALUES (?,?,?)");
+        pStatement.setString(1, message.getLogin());
+        pStatement.setBytes(2, passHash(message.getPassword(), salt));
+        pStatement.setBytes(3, salt);
+        pStatement.addBatch();
+        pStatement.executeBatch();
+        pStatement.close();
+        ResultSet credentialsSet = statement.executeQuery("SELECT id FROM users WHERE Login = '" + message.getLogin() + "'");
+        userPath = new File("./user" + credentialsSet.getString("id"));
+        userPath.mkdir(); // доделать проверку создания папки юзера
+    }
+
+    private void sendListFiles (ChannelHandlerContext ctx) {
+        FileListMessage flm = new FileListMessage();
+        flm.setPath(userPath);
+        File [] temp = userPath.listFiles();
+        Arrays.sort(temp, (a,b) -> Boolean.compare(b.isDirectory(), a.isDirectory())); //доделать проверку на null
+        flm.setFileList(temp);
+        ctx.writeAndFlush(flm);
     }
 
     @Override

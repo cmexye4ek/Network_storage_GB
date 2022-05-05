@@ -11,6 +11,7 @@ import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
 import io.netty.handler.codec.LengthFieldPrepender;
 import ru.gb.storage.commons.handler.JsonDecoder;
 import ru.gb.storage.commons.handler.JsonEncoder;
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -21,7 +22,7 @@ public class Server {
     private Connection dbConnector;
     private Statement statement;
 
-    public static void main(String[] args) throws InterruptedException, SQLException {
+    public static void main(String[] args) throws InterruptedException, SQLException, IOException {
         new Server(9000).start();
     }
 
@@ -29,9 +30,11 @@ public class Server {
         this.port = port;
     }
 
-    public void start() throws InterruptedException, SQLException {
+    public void start() throws InterruptedException, SQLException, IOException {
+        DBConnector.dBCreate();
         dbConnector = DBConnector.getConnection();
         statement = dbConnector.createStatement();
+        createUserTable();
         NioEventLoopGroup bossGroup = new NioEventLoopGroup(1);
         NioEventLoopGroup workerGroup = new NioEventLoopGroup();
         try {
@@ -61,5 +64,14 @@ public class Server {
             bossGroup.shutdownGracefully();
             workerGroup.shutdownGracefully();
         }
+    }
+
+    private void createUserTable() throws SQLException {
+        statement.executeUpdate("CREATE TABLE IF NOT EXISTS Users (\n"
+                + "id INTEGER PRIMARY KEY AUTOINCREMENT, \n"
+                + "Login VARCHAR(50), \n"
+                + "Password VARCHAR(50), \n"
+                + "Salt VARCHAR(50) \n"
+                + ")");
     }
 }
