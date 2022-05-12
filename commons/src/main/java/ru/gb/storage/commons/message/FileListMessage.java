@@ -2,24 +2,28 @@ package ru.gb.storage.commons.message;
 
 import java.io.File;
 
-public class FileListMessage extends Message{
+public class FileListMessage extends Message {
     private File path;
-    private File [] fileList;
+    private File[] fileList;
+    private long space;
 
-
-    public File getPath() {
-        return path;
+    public String getPath() {
+        return path.getPath();
     }
 
     public void setPath(File path) {
         this.path = path;
     }
 
-    public File [] getFileList() {
+    public File[] getFileList() {
         return fileList;
     }
 
-    public void setFileList(File [] fileList) {
+    public void setFileList(File[] fileList) {
         this.fileList = fileList;
+    }
+
+    public long getSpace() {
+        return path.getUsableSpace();
     }
 }

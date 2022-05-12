@@ -4,6 +4,15 @@ public class FileContentMessage extends Message {
     private byte[] content;
     private long startPosition;
     private boolean last;
+    private String path;
+
+    public String getPath() {
+        return path;
+    }
+
+    public void setPath(String path) {
+        this.path = path;
+    }
 
     public byte[] getContent() {
         return content;

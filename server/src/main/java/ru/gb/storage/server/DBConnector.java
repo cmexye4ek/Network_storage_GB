@@ -15,7 +15,7 @@ public class DBConnector {
     }
 
     public static void dBCreate() throws IOException {
-        File db = new File("./users.db");
+        File db = new File("." + File.separator + "users.db");
         if (db.exists()) {
             System.out.println("Database already exist");
         } else if (db.createNewFile()) {
