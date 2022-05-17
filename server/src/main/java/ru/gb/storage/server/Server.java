@@ -9,6 +9,9 @@ import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
 import io.netty.handler.codec.LengthFieldPrepender;
+import org.apache.logging.log4j.Level;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import ru.gb.storage.commons.handler.JsonDecoder;
 import ru.gb.storage.commons.handler.JsonEncoder;
 import java.io.IOException;
@@ -18,6 +21,7 @@ import java.sql.Statement;
 
 
 public class Server {
+    private static final Logger LOGGER = LogManager.getLogger(Server.class.getName());
     private final int port;
     private Connection dbConnector;
     private Statement statement;
@@ -50,7 +54,7 @@ public class Server {
                                     new LengthFieldPrepender(3),
                                     new JsonDecoder(),
                                     new JsonEncoder(),
-                                    new ServerHandler(dbConnector, statement));
+                                    new ServerHandler(dbConnector));
                         }
                     })
                     .option(ChannelOption.SO_BACKLOG, 128)
@@ -58,11 +62,13 @@ public class Server {
 
             ChannelFuture future = server.bind(port).sync();
 
-            System.out.println("Server started");
+            LOGGER.log(Level.INFO, "Server started");
             future.channel().closeFuture().sync();
         } finally {
             bossGroup.shutdownGracefully();
             workerGroup.shutdownGracefully();
+            dbConnector.close();
+            LOGGER.log(Level.INFO, "Server stopped");
         }
     }
 
@@ -73,5 +79,6 @@ public class Server {
                 + "Password VARCHAR(50), \n"
                 + "Salt VARCHAR(50) \n"
                 + ")");
+        statement.close();
     }
 }

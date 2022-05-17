@@ -1,13 +1,13 @@
 package ru.gb.storage.commons.message;
 
-public class AuthMessage extends Message {
+public class RegistrationMessage extends Message {
     private String login;
     private String password;
     private Status status;
 
     public enum Status {
-        AUTH_ERROR_WRONG_LOGIN,
-        AUTH_ERROR_WRONG_PASSWORD,
+        REGISTRATION_ERROR_LOGIN_EXIST,
+        REGISTRATION_ERROR_USERFOLDER_CREATION,
         SUCCESS
     }
 
@@ -38,7 +38,7 @@ public class AuthMessage extends Message {
 
     @Override
     public String toString() {
-        return "Auth{" +
+        return "Registration{" +
                 "Login='" + login + '\'' +
                 "Password='" + password + '\'' +
                 "Status='" + status + '\'' +

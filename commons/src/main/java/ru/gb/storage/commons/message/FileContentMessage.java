@@ -5,6 +5,15 @@ public class FileContentMessage extends Message {
     private long startPosition;
     private boolean last;
     private String path;
+    private long fileLength;
+
+    public long getFileLength() {
+        return fileLength;
+    }
+
+    public void setFileLength (long fileLength) {
+        this.fileLength = fileLength;
+    }
 
     public String getPath() {
         return path;
